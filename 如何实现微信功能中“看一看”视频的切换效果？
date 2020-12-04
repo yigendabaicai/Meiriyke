@@ -1,0 +1,208 @@
+# code1
+
+接下来就以我们的一个小demo为例，让大家熟悉一下这个API的用法。
+demo里首先获取目标元素target，然后用intersectionObserver对它进行监听，回调函数里返回的response中，有一个字段叫intersectionRation， 表示交集比例。
+我们去判断intersectionRation，当它大于0，打印在视图内部，小于或者等于0的话，就是在外部 。
+
+var target = document.querySelector('#listItem'); // 获取监听的目标元素
+var observer = new IntersectionObserver((res) => {
+   if(res.intersectionRatio > 0) { // 表示相交比例
+      console.log('在视图内部')
+   } else {
+      console.log('在视图外部')
+   }
+});
+observer.observe(target);
+
+# code2
+
+首先在index.js文件里，定义一个视频列表videos，以及当前正在播放的视频索引currentPlayVideoIndex，并在样式文件index.wxss里，通过粉色的背景来标出当前正在被监听的视频。(code 2)
+// index.js
+Page({
+  /**
+   * 页面的初始数据
+   */
+  data: {
+    // 视频列表，用video_id来区分不同的视频
+    videos: [{
+      video_id: 'mpVideo0'
+    }, {
+      video_id: 'mpVideo1'
+    }, {
+      video_id: 'mpVideo2'
+    }, {
+      video_id: 'mpVideo3'
+    }, {
+      video_id: 'mpVideo4'
+    }, {
+      video_id: 'mpVideo5'
+    }, {
+      video_id: 'mpVideo6'
+    }, {
+      video_id: 'mpVideo7'
+    }],
+    currentPlayVideoIndex: 0, // 当前正在播放的视频index
+  }
+})
+
+// index.wxml
+// for循环渲染列表，其中的active表示当前正在被监听播放的视频，它的背景会设置为粉色
+<view>
+  <view 
+    wx:for="{{ videos }}"
+    wx:for-index="idx" 
+    wx:for-item="videoItem"
+    class="{{ currentPlayVideoIndex === idx ? 'active' : ''}}"
+  >
+    <span>当前正在播放的视频 index{{ idx }} </span>
+    // 注意用video_id来给元素加id，用于后面获取元素
+    <video
+      id="{{ videoItem.video_id }}" 
+      data-index="{{ idx }}"
+      preload
+      src="http://wxsnsdy.tc.qq.com/105/20210/snsdyvideodownload?filekey=30280201010421301f0201690402534804102ca905ce620b1241b726bc41dcff44e00204012882540400&bizid=1023&hy=SH&fileparam=302c020101042530230204136ffd93020457e3c4ff02024ef202031e8d7f02030f42400204045a320a0201000400"
+      class='video-item'
+      muted
+      controls>
+    </video>
+  </view>
+</view>
+
+// index.wxss
+.video-item {
+  height: 450px;
+}
+.test {
+  width: 100%;
+  height: 450px;
+  border: 1px solid red;
+  padding: 30px;
+}
+// 通过背景粉色设置当前被播放监听的视频
+.active {
+  color: pink
+
+# code3
+
+  onLoad: function (options) {
+    //  对视频进行监听
+    this.listenVideo();
+  },  
+  
+  controvideos: function(res) {
+    console.log('res' + res);
+  },
+  
+  listenVideo: function () {
+    // 获取到第一个视频
+    const currentId = this.data.videos[this.data.currentPlayVideoIndex].video_id;
+    // 关键代码
+    // observer需要指定对比哪个元素的相交区域，而这里我们要对比的就是可视区域，也就是viewport
+    this.observerObj = wx.createIntersectionObserver().relativeToViewport();
+    // 监听目标视频跟viewport相交区域的变化，回调函数是controlVideos。在里面打印回调函数的值
+    this.observerObj.observe(`#${currentId}`, this.controlVideos);
+  }
+  
+  # code4
+  
+  wx.createVideoContext(currentId).play();
+  
+  # code5
+  
+    controlVideos: function (res) {
+     const { currentPlayVideoIndex } = this.data;
+     console.log('当前currentIndex', currentPlayVideoIndex)
+    const currentId = this.data.videos[currentPlayVideoIndex].video_id;
+
+	 if (res && res.intersectionRatio > 0) {
+	   // 视频在可视区域内，播放视频
+       wx.createVideoContext(currentId).play();
+    } else {
+	   //  需要切换视频的时候，将当前视频暂停播放
+        wx.createVideoContext(currentId).pause();
+	   // 切换视频。由于切换视频需要判断当前是向上或者向下，所以这里先空着。       
+	}
+  }
+  
+  # code6
+  
+   controlVideos: function (res) {
+    const { currentPlayVideoIndex } = this.data;
+    console.log('当前currentIndex', currentPlayVideoIndex)
+
+    const currentId = this.data.videos[currentPlayVideoIndex].video_id;
+
+      if (res && res.intersectionRatio > 0) {
+        // 视频在可视区域内，播放视频
+        wx.createVideoContext(currentId).play();
+      } else {
+        //  需要切换视频的时候，将当前视频暂停播放。
+        wx.createVideoContext(currentId).pause();
+        // 当top < 0的时候，说明是在向上滑动，这时候currentPlayVideoIndex 需要加1
+        if (res.boundingClientRect.top < 0) {
+           // 注意边界条件的判断，currentPlayVideoIndex不能大于视频长度
+          if (currentPlayVideoIndex < this.data.videos.length - 1) {
+            this.setData({ 'currentPlayVideoIndex': currentPlayVideoIndex + 1 }, () => {
+              // 解绑第一个视频，保证同一个时间只监听一个视频
+              this.observerObj.disconnect();
+              // 绑定下一个视频的监听
+              this.listenVideo();
+            });
+          }
+        } else {
+          // 当top > 0的时候，说明是在向下滑动，这时候currentPlayVideoIndex 需要减1，依旧需要注意边界条件的判断
+          if (currentPlayVideoIndex - 1 < 0) {
+            return;
+          }
+          this.setData({ 'currentPlayVideoIndex': this.data.currentPlayVideoIndex - 1 }, () =>         {
+            // 解绑第一个视频，保证同一个时间只监听一个视频
+            this.observerObj.disconnect();
+            // 绑定下一个视频的监听
+            this.listenVideo();
+          })
+        }
+      }
+    }
+    
+    # code7
+    
+     this.observerObj = wx.createIntersectionObserver().relativeToViewport({ top: -150, bottom: -150 });
+     
+    # code8
+     
+   // 防抖函数，不多解释
+debounce: (fn, duration) => {
+    var timer = null;
+    return function () {
+      var context = this;
+      var args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        fn.apply(context, args);
+      }, duration)
+    }
+},
+ onLoad: function (options) {
+    // onLoad的时候先定义这个防抖函数
+    this.debounceScroll = this.debounce(this.computeIndex, 500);
+    this.listenVideo();
+  },
+  
+  onPageScroll: function(e) {
+    this.debounceScroll(e);
+  },
+  // 用于计算滑动之后应该播放视频scrollIndex的值
+  computeIndex: function(e) {
+    const scrollTop = e.scrollTop;
+    let scollIndex = Math.floor(scrollTop / 450);
+    let mod = scrollTop % 450;
+
+    if (scollIndex !== this.data.currentPlayVideoIndex) {
+      this.setData({ 'currentPlayVideoIndex': scollIndex }, () => {
+        // 解绑第一个视频，保证同一个时间只监听一个视频
+        this.observerObj.disconnect();
+        // 绑定下一个视频的监听
+        this.listenVideo();
+      })
+    }
+  }  
